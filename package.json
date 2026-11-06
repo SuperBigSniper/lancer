@@ -11,6 +11,8 @@
     "marketing:capture": "pnpm --filter @lancer/desktop run demo:showcase-captures",
     "marketing:render": "pnpm --filter @lancer/video run render",
     "typecheck": "pnpm check:workspaces && pnpm build:shared && pnpm -r --if-present typecheck && pnpm typecheck:extension-examples",
+    "package:mac": "pnpm --filter @lancer/desktop run package",
+    "package:mac:ci": "pnpm --filter @lancer/desktop run package:mac:ci",
     "package:win": "pnpm --filter @lancer/desktop run package:win",
     "package:win:dir": "pnpm --filter @lancer/desktop run package:win:dir",
     "lint": "pnpm build:shared && eslint . --max-warnings 0",

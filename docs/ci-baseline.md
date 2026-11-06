@@ -74,6 +74,24 @@ See [merge enforcement](merge-enforcement.md) for its contract and remote
 activation status. Repository branch rules must require this result before it
 blocks merges; local tests alone do not establish remote enforcement.
 
+## Distribution packaging
+
+`.github/workflows/package.yml` packages the desktop app on `workflow_dispatch`
+and on `v*` tag pushes; it is separate from `CI` so merge gating stays fast.
+The macOS job runs on the arm64 runner that matches the checked-in `dmg`/`zip`
+arm64 targets, and the Windows job produces the NSIS installer and portable exe.
+Both jobs run `pnpm verify:release-config` before packing and upload artifacts
+with SHA-256 checksums.
+
+CI holds no persistent macOS certificate, and `run-electron-builder.mjs` refuses
+ad-hoc signing on purpose. The macOS job therefore calls `package:mac:ci`, which
+pins `mac.identity: null` and `CSC_IDENTITY_AUTO_DISCOVERY=false` and produces
+**unsigned, unnotarized** artifacts for smoke testing. Those artifacts are not
+public distribution candidates and must not feed an update channel; see
+[macOS local update identity](macos-local-signing.md) and
+[release readiness](release-readiness.md). Tag runs collect both platforms into a
+**draft** release so a maintainer reviews them before publishing.
+
 ## Next decisions, in order
 
 1. Strengthen IPC contracts: main and preload currently rely on annotations and

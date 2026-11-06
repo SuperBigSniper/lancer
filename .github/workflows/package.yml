@@ -1,0 +1,128 @@
+name: Package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package-macos:
+    name: macOS arm64
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify release configuration
+        run: pnpm verify:release-config
+
+      - name: Package dmg and zip without signing
+        run: pnpm --filter @lancer/desktop run package:mac:ci
+
+      - name: Write checksums
+        working-directory: apps/desktop/release
+        run: |
+          shasum -a 256 ./*.dmg ./*.zip > SHA256SUMS-macos.txt
+          cat SHA256SUMS-macos.txt
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: lancer-macos-arm64-unsigned
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/SHA256SUMS-macos.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  package-windows:
+    name: Windows x64
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify release configuration
+        run: pnpm verify:release-config
+
+      - name: Package NSIS installer and portable exe
+        run: pnpm --filter @lancer/desktop run package:win
+
+      - name: Write checksums
+        working-directory: apps/desktop/release
+        shell: pwsh
+        run: |
+          Get-FileHash -Algorithm SHA256 -Path ./*.exe |
+            ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path -Leaf $_.Path)" } |
+            Set-Content -Path SHA256SUMS-windows.txt
+          Get-Content SHA256SUMS-windows.txt
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: lancer-windows-x64
+          path: |
+            apps/desktop/release/*.exe
+            apps/desktop/release/SHA256SUMS-windows.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Draft release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - package-macos
+      - package-windows
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List release files
+        run: ls -lh artifacts
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: ${{ github.ref_name }}
+          draft: true
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: artifacts/*
